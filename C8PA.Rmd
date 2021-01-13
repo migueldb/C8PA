@@ -1,0 +1,233 @@
+---
+title: "Practical Machine Learning - Programming Assignment"
+author: "Miguel Duarte B."
+date: "12/31/2020"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE)
+```
+
+## Introduction
+
+This is
+
+## Background
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: [http://groupware.les.inf.puc-rio.br/har](http://groupware.les.inf.puc-rio.br/har) (see the section on the Weight Lifting Exercise Dataset). 
+
+### Preprocessing
+
+```{r libraries, results='hide'}
+library(tidyverse)
+library(lubridate)
+library(caret)
+library(AppliedPredictiveModeling)
+library(doParallel)
+
+set.seed(2021)
+```
+
+```{r getfiles, echo=FALSE, cache=TRUE}
+trainingURL <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+evaluationURL <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+rawFolder <- file.path(getwd(), "raw")
+trainingFile <- file.path(rawFolder, "training.csv")
+evaluationFile <- file.path(rawFolder, "evaluation.csv")
+
+if(!file.exists(rawFolder)){dir.create(rawFolder)}
+if(!file.exists(trainingFile)){download.file(trainingURL, trainingFile)}
+if(!file.exists(evaluationFile)){download.file(evaluationURL, evaluationFile)}
+
+trainingSRC <- read_csv(
+    trainingFile, col_types = cols(
+        .default = col_double(),
+        X1 = col_skip(),
+        user_name = col_character(),
+        #raw_timestamp_part_1 = col_datetime(as_datetime()),
+        raw_timestamp_part_1 = col_double(),
+        cvtd_timestamp = col_character(),
+        new_window = col_factor(),
+        classe = col_factor()
+        )
+    )
+
+dropTraining <- names(trainingSRC[, sapply(trainingSRC, function(x)all(is.na(x)))])
+
+evaluationSRC <- read_csv(
+    evaluationFile, col_types = cols(
+        .default = col_double(),
+        X1 = col_skip(),
+        user_name = col_character(),
+        #raw_timestamp_part_1 = col_datetime(as_datetime()),
+        raw_timestamp_part_1 = col_double(),
+        cvtd_timestamp = col_character(),
+        new_window = col_factor(),
+        problem_id = col_integer()
+        )
+    )
+
+dropEvaluation <- names(
+    evaluationSRC[, sapply(evaluationSRC, function(x)all(is.na(x)))]
+    )
+dropAdd <- c(
+    "user_name",
+    "raw_timestamp_part_1",
+    "raw_timestamp_part_2",
+    "cvtd_timestamp",
+    "new_window",
+    "num_window"
+    )
+
+trainingSRC <- trainingSRC %>%
+    mutate(raw_timestamp_part_1 = as_datetime(raw_timestamp_part_1)) %>%
+    #select(-all_of(dropTraining))
+    select(-all_of(c(dropEvaluation, dropAdd)))
+
+evaluationSRC <- evaluationSRC %>%
+    mutate(raw_timestamp_part_1 = as_datetime(raw_timestamp_part_1)) %>%
+    select(-all_of(c(dropEvaluation, dropAdd)))
+
+set.seed(2021)
+
+fullInTrain <- createDataPartition(y=trainingSRC$classe, p = 0.75, list = FALSE)
+fullTesting <- trainingSRC[-fullInTrain, ]
+fullTraining <- trainingSRC[fullInTrain, ]
+
+miniInTrain <- createDataPartition(y=trainingSRC$classe, p = 0.1, list = FALSE)
+miniTesting <- trainingSRC[-miniInTrain, ]
+miniTraining <- trainingSRC[miniInTrain, ]
+
+training <- fullTraining
+testing <- fullTesting
+
+```
+
+```{r previsualization, cache=TRUE, dependson='getfiles'}
+varsWtotal <- sapply(names(testing), function(x){grepl("total", x)})
+varsW_x <- sapply(names(testing), function(x){grepl("_x", x)})
+varsW_y <- sapply(names(testing), function(x){grepl("_y", x)})
+varsW_z <- sapply(names(testing), function(x){grepl("_z", x)})
+
+transparentTheme(trans = .1)
+mySettings <- list(
+  superpose.symbol = list(
+    alpha = rep(0.9, 5),
+    col = c(
+      "light pink",
+      "light blue",
+      "light green",
+      "thistle1",
+      "light yellow"
+      ),
+    pch = rep(16,5)
+    )
+  )
+
+randSample <- sort(sample.int(dim(training)[1],1000))
+
+featurePlot(
+  x = training[randSample, varsWtotal],
+  y = training$classe[randSample],
+  plot = "ellipse",
+  auto.key = list(columns = 5),
+  par.settings = mySettings
+  )
+
+featurePlot(
+  x = training[, varsW_x],
+  y = training$classe,
+  plot = "ellipse",
+  auto.key = list(columns = 5),
+  par.settings = mySettings
+  )
+
+featurePlot(
+  x = training[, varsW_y],
+  y = training$classe,
+  plot = "ellipse",
+  auto.key = list(columns = 5),
+  par.settings = mySettings
+  )
+
+featurePlot(
+  x = training[, varsW_z],
+  y = training$classe,
+  plot = "ellipse",
+  auto.key = list(columns = 5),
+  par.settings = mySettings
+  )
+```
+
+```{r parallel}
+cl <- makePSOCKcluster(3)
+registerDoParallel(cl)
+```
+
+```{r fitRF, cache=TRUE, dependson='getfiles'}
+mod1 <- train(
+  classe ~ .,
+  method="rf",
+  data=training,
+  trControl = trainControl(method = "cv", 3)
+  )
+```
+
+```{r fitNB, cache=TRUE, dependson='getfiles'}
+mod2 <- train(classe ~ ., method="naive_bayes", data=training)
+```
+
+```{r fitBGLM, cache=TRUE, dependson='getfiles'}
+mod3 <- train(classe ~ ., method="bayesglm", data=training)
+```
+
+```{r fitQDA, cache=TRUE, dependson='getfiles'}
+mod4 <- train(classe ~ ., method="qda", data=training, trControl = trainControl(method = "cv", 30))
+```
+
+```{r fitKNN, cache=TRUE, dependson='getfiles'}
+mod5 <- train(classe ~ ., method="knn", data=training, trControl = trainControl(method = "cv", 30))
+```
+
+```{r fitKKNN, cache=TRUE, dependson='getfiles'}
+mod6 <- train(classe ~ ., method="kknn", data=training, trControl = trainControl(method = "cv", 30))
+```
+
+```{r sequential, dependson='libraries'}
+stopCluster(cl)
+registerDoSEQ()
+```
+
+```{r predictions, cache=TRUE, dependson=c(-2, -3, -4, -5, -6, -7)}
+pred1 <- predict(mod1, testing)
+pred2 <- predict(mod2, testing)
+pred3 <- predict(mod3, testing)
+pred4 <- predict(mod4, testing)
+pred5 <- predict(mod5, testing)
+pred6 <- predict(mod6, testing)
+
+confusionMatrix(testing$classe, pred1)$overall["Accuracy"]
+confusionMatrix(testing$classe, pred2)$overall["Accuracy"]
+confusionMatrix(testing$classe, pred3)$overall["Accuracy"]
+confusionMatrix(testing$classe, pred4)$overall["Accuracy"]
+confusionMatrix(testing$classe, pred5)$overall["Accuracy"]
+confusionMatrix(testing$classe, pred6)$overall["Accuracy"]
+
+qplot(pred1, pred6, color=classe, data=testing)
+```
+
+```{r combine, cache=TRUE, dependson='predictions'}
+predDF <- data.frame(pred1, pred6, classe = testing$classe)
+
+combModFit <- train(classe ~ ., method = "rf", data = predDF)
+combPred <- predict(combModFit, predDF)
+
+confusionMatrix(testing$classe, combPred)$overall["Accuracy"]
+```
+
+
+
+
