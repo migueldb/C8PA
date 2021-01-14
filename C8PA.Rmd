@@ -1,10 +1,19 @@
 ---
 title: "Practical Machine Learning - Programming Assignment"
 author: "Miguel Duarte B."
-date: "12/31/2020"
+date: "01/13/2021"
 output:
-  html_document: default
+  html_document:
+    self_contained: true
   pdf_document: default
+bibliography: references.bib
+knit: (function(input, ...) {
+  rmarkdown::render(
+    input,
+    output_file = "index.html",
+    envir = globalenv()
+  )
+})
 ---
 
 ```{r setup, include=FALSE}
@@ -12,11 +21,12 @@ knitr::opts_chunk$set(echo = TRUE, warning = FALSE)
 ```
 
 ## Introduction
-
-This is
+This work is a programming assignment submission for the Practical Machine Learning course with the Johns Hopkins University through Coursera.  The goal of this project is to use data from accelerometers to conduct qualitative activity recognition of weight lifting exercises.  The data provided is a csv file with 159 columns and 19,622 rows.  The student is expected to use the R-package 'caret' and apply any, or a combination, of the Machine Learning techniques learned during the course to correctly identify the specified execution of the exercise represented with the variable "classe".
 
 ## Background
-Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: [http://groupware.les.inf.puc-rio.br/har](http://groupware.les.inf.puc-rio.br/har) (see the section on the Weight Lifting Exercise Dataset). 
+The data was collected from six young individuals who were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions, where Class A is the correct execution and Classes B - E are common mistakes in execution [@Velloso2013].
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: [http://groupware.les.inf.puc-rio.br/har](http://groupware.les.inf.puc-rio.br/har) (see the section on the Weight Lifting Exercise Dataset). 
 
 ### Preprocessing
 
@@ -115,7 +125,7 @@ varsW_z <- sapply(names(testing), function(x){grepl("_z", x)})
 transparentTheme(trans = .1)
 mySettings <- list(
   superpose.symbol = list(
-    alpha = rep(0.9, 5),
+    alpha = rep(0.1, 5),
     col = c(
       "light pink",
       "light blue",
@@ -228,6 +238,24 @@ combPred <- predict(combModFit, predDF)
 confusionMatrix(testing$classe, combPred)$overall["Accuracy"]
 ```
 
+```{r importance}
+library(randomForest)
+importanceRF <- randomForest(classe ~ ., data = miniTraining)
+importanceDF <- as.data.frame(importance(importanceRF), optional = TRUE)
+importanceDF$name <- row.names(importanceDF)
+importanceDF <- importanceDF[order(importanceDF$MeanDecreaseGini, decreasing = TRUE), ]
 
+varsImportance <- names(testing) %in% head(importanceDF, 4)$name
 
+featurePlot(
+  x = training[, varsImportance],
+  y = training$classe,
+  plot = "ellipse",
+  auto.key = list(columns = 5),
+  par.settings = mySettings
+  )
+```
 
+# References
+
+<div id="refs"></div>
