@@ -10,206 +10,176 @@ bibliography: references.bib
 knit: (function(input, ...) {
   rmarkdown::render(
     input,
-    output_file = "index.html",
-    envir = globalenv()
-  )
-})
+    output_file = "index.html"
+    )
+  })
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, warning = FALSE)
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 ```
+
+# NOTES FOR REVIEWERS
+I'm using GitHub Pages functionality that allows to host html code as a webpage [this webpage](https://migueldb.github.io/C8PA/).  If you want to review the rMarkdown file and the complete repository, please check [https://github.com/migueldb/C8PA](https://github.com/migueldb/C8PA)
 
 ## Introduction
 This work is a programming assignment submission for the Practical Machine Learning course with the Johns Hopkins University through Coursera.  The goal of this project is to use data from accelerometers to conduct qualitative activity recognition of weight lifting exercises.  The data provided is a csv file with 159 columns and 19,622 rows.  The student is expected to use the R-package 'caret' and apply any, or a combination, of the Machine Learning techniques learned during the course to correctly identify the specified execution of the exercise represented with the variable "classe".
 
 ## Background
-The data was collected from six young individuals who were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions, where Class A is the correct execution and Classes B - E are common mistakes in execution [@Velloso2013].
+The data was collected from six young individuals who were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions, where Class A is the correct execution and Classes B - E represent common mistakes in execution [@Velloso2013].
 
 Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: [http://groupware.les.inf.puc-rio.br/har](http://groupware.les.inf.puc-rio.br/har) (see the section on the Weight Lifting Exercise Dataset). 
 
-### Preprocessing
+## Preprocessing
+First we load all the required libraries and set a random number generator seed for reproducibility.
 
 ```{r libraries, results='hide'}
-library(tidyverse)
-library(lubridate)
-library(caret)
-library(AppliedPredictiveModeling)
-library(doParallel)
+library(readr); library(dplyr); library(lubridate); library(caret); library(AppliedPredictiveModeling); library(doParallel); library(randomForest) # Load libraries
 
-set.seed(2021)
+set.seed(2021) # Set random generator seed
 ```
 
-```{r getfiles, echo=FALSE, cache=TRUE}
+### Collect The Data
+Next we download the data from the server and store the csv files in the raw folder.  The downloaded files will be used if they exist otherwise the script will download a new set of files.  An unmodified copy of the data is stored using the data frames *trainingSRC* and *evaluationSRC*  with explicit declaration of column types.
+
+```{r getfiles, cache=TRUE}
+# Source files URLs
 trainingURL <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
 evaluationURL <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
 
-rawFolder <- file.path(getwd(), "raw")
-trainingFile <- file.path(rawFolder, "training.csv")
-evaluationFile <- file.path(rawFolder, "evaluation.csv")
+rawFolder <- file.path(getwd(), "raw"); trainingFile <- file.path(rawFolder, "training.csv"); evaluationFile <- file.path(rawFolder, "evaluation.csv") # Assign variables for raw folder and source file names
 
+# Check if the files have been downloaded and stored already, if not download and save them to the raw folder
 if(!file.exists(rawFolder)){dir.create(rawFolder)}
 if(!file.exists(trainingFile)){download.file(trainingURL, trainingFile)}
 if(!file.exists(evaluationFile)){download.file(evaluationURL, evaluationFile)}
 
-trainingSRC <- read_csv(
-    trainingFile, col_types = cols(
-        .default = col_double(),
-        X1 = col_skip(),
-        user_name = col_character(),
-        #raw_timestamp_part_1 = col_datetime(as_datetime()),
-        raw_timestamp_part_1 = col_double(),
-        cvtd_timestamp = col_character(),
-        new_window = col_factor(),
-        classe = col_factor()
-        )
-    )
+# Define column types explicitly
+col_typesTraining <- cols(.default = col_double(), X1 = col_skip(), user_name = col_character(), cvtd_timestamp = col_character(), new_window = col_factor(), classe = col_factor())
 
+col_typesEvaluation <- cols(.default = col_double(), X1 = col_skip(), user_name = col_character(), cvtd_timestamp = col_character(), new_window = col_factor(), problem_id = col_integer())
+
+# Create training and evaluation data frames with the unmodified data from the source files
+trainingSRC <- read_csv(trainingFile, col_types = col_typesTraining)
+evaluationSRC <- read_csv(evaluationFile, col_types = col_typesEvaluation)
+```
+
+### Clean The Data
+We noted that the data sets provided have numerous empty columns, these empty columns are identified and removed before splitting the training data set into training and testing.  Columns with information irrelevant to the classification problem are identified as well for removal.  Finally we also noticed that the *evaluation* data used for the final quiz has more empty columns, this means that the corresponding variables won't be available to build predictions from the fitted models, therefore it is required to remove these columns (variables) from the *training* and *testing* datasets.
+
+```{r cleandata, cache=TRUE, dependson='getfiles'}
+# Identify the columns with no information (empty columns)
 dropTraining <- names(trainingSRC[, sapply(trainingSRC, function(x)all(is.na(x)))])
+dropEvaluation <- names(evaluationSRC[, sapply(evaluationSRC, function(x)all(is.na(x)))])
 
-evaluationSRC <- read_csv(
-    evaluationFile, col_types = cols(
-        .default = col_double(),
-        X1 = col_skip(),
-        user_name = col_character(),
-        #raw_timestamp_part_1 = col_datetime(as_datetime()),
-        raw_timestamp_part_1 = col_double(),
-        cvtd_timestamp = col_character(),
-        new_window = col_factor(),
-        problem_id = col_integer()
-        )
-    )
+# Identify additional columns with information that is not relevant to the prediction
+dropAdd <- c("user_name", "raw_timestamp_part_1", "raw_timestamp_part_2", "cvtd_timestamp", "new_window", "num_window")
 
-dropEvaluation <- names(
-    evaluationSRC[, sapply(evaluationSRC, function(x)all(is.na(x)))]
-    )
-dropAdd <- c(
-    "user_name",
-    "raw_timestamp_part_1",
-    "raw_timestamp_part_2",
-    "cvtd_timestamp",
-    "new_window",
-    "num_window"
-    )
-
-trainingSRC <- trainingSRC %>%
-    mutate(raw_timestamp_part_1 = as_datetime(raw_timestamp_part_1)) %>%
-    #select(-all_of(dropTraining))
-    select(-all_of(c(dropEvaluation, dropAdd)))
-
-evaluationSRC <- evaluationSRC %>%
+# Create training and evaluation data frames with only the relevant columns (variables) to the classification exercise
+trainingClean <- trainingSRC %>%
     mutate(raw_timestamp_part_1 = as_datetime(raw_timestamp_part_1)) %>%
     select(-all_of(c(dropEvaluation, dropAdd)))
 
-set.seed(2021)
+evaluationClean <- evaluationSRC %>%
+    mutate(raw_timestamp_part_1 = as_datetime(raw_timestamp_part_1)) %>%
+    select(-all_of(c(dropEvaluation, dropAdd)))
 
-fullInTrain <- createDataPartition(y=trainingSRC$classe, p = 0.75, list = FALSE)
-fullTesting <- trainingSRC[-fullInTrain, ]
-fullTraining <- trainingSRC[fullInTrain, ]
+# Two sets of split data (mini and full) are generated to expedite the model selection process by using a smaller training data set.  In the last run only the *fullTraining* and *fullTesting* datasets are used.
+fullInTrain <- createDataPartition(y=trainingClean$classe, p = 0.75, list = FALSE)
+fullTesting <- trainingClean[-fullInTrain, ]
+fullTraining <- trainingClean[fullInTrain, ]
 
-miniInTrain <- createDataPartition(y=trainingSRC$classe, p = 0.1, list = FALSE)
-miniTesting <- trainingSRC[-miniInTrain, ]
-miniTraining <- trainingSRC[miniInTrain, ]
+miniInTrain <- createDataPartition(y=trainingClean$classe, p = 0.1, list = FALSE)
+miniTesting <- trainingClean[-miniInTrain, ]
+miniTraining <- trainingClean[miniInTrain, ]
 
 training <- fullTraining
 testing <- fullTesting
-
 ```
 
-```{r previsualization, cache=TRUE, dependson='getfiles'}
-varsWtotal <- sapply(names(testing), function(x){grepl("total", x)})
-varsW_x <- sapply(names(testing), function(x){grepl("_x", x)})
-varsW_y <- sapply(names(testing), function(x){grepl("_y", x)})
-varsW_z <- sapply(names(testing), function(x){grepl("_z", x)})
+## Preliminary Analysis
+In order to understand the impact each one of the variables have on the classification process we take advantage of the variable importance evaluation functions.  The package *randomForest* includes the function *importance* that helps understand the correlation structure.  For visualization purposes we select the top 4 most important variables and create a feature plot with them.  It is clear that there's no clear separation between the classes for the selected predictors as the color clouds superpose in the feature plots.
 
-transparentTheme(trans = .1)
-mySettings <- list(
-  superpose.symbol = list(
-    alpha = rep(0.1, 5),
-    col = c(
-      "light pink",
-      "light blue",
-      "light green",
-      "thistle1",
-      "light yellow"
-      ),
-    pch = rep(16,5)
-    )
-  )
+```{r importance, cache=TRUE, dependson='cleandata'}
+# Fit a Random Forest model required to estimate the variable's importance ranking
+importanceRF <- randomForest(classe ~ ., data = miniTraining)
 
-randSample <- sort(sample.int(dim(training)[1],1000))
+# Create a data frame with the variables sorted by importance and print the top 4
+importanceDF <- as.data.frame(importance(importanceRF), optional = TRUE)
+importanceDF$name <- row.names(importanceDF)
+importanceDF <- importanceDF[order(importanceDF$MeanDecreaseGini, decreasing = TRUE), ]
+print(head(importanceDF))
 
-featurePlot(
-  x = training[randSample, varsWtotal],
-  y = training$classe[randSample],
-  plot = "ellipse",
-  auto.key = list(columns = 5),
-  par.settings = mySettings
-  )
+# Create a logic vector where only the top variables by importance are set to TRUE 
+varsImportance <- names(testing) %in% head(importanceDF, 4)$name
 
-featurePlot(
-  x = training[, varsW_x],
-  y = training$classe,
-  plot = "ellipse",
-  auto.key = list(columns = 5),
-  par.settings = mySettings
-  )
+# Create a feature plot with the top 4 variables by importance
+transparentTheme(trans = .1) # Select theme
+myColors <- c("light pink", "light blue", "light green", "thistle1", "light yellow") # Modify theme colors
+mySettings <- list(superpose.symbol = list(alpha = rep(0.1, 5),col = myColors, pch = rep(16,5))) # Modify theme superpose symbol settings
 
-featurePlot(
-  x = training[, varsW_y],
-  y = training$classe,
-  plot = "ellipse",
-  auto.key = list(columns = 5),
-  par.settings = mySettings
-  )
+randSample <- sort(sample.int(dim(training)[1],1000)) # Use a smaller random sample to make easier to spot the class clouds
 
-featurePlot(
-  x = training[, varsW_z],
-  y = training$classe,
-  plot = "ellipse",
-  auto.key = list(columns = 5),
-  par.settings = mySettings
-  )
+featurePlot(x = training[, varsImportance],  y = training$classe, plot = "ellipse", auto.key = list(columns = 5), par.settings = mySettings) # And finally generate the plot
 ```
+
+## Fit models
+We are going to fit 6 different models and compare them in terms of accuracy.  we take advantage of the *parallel* library to expedite the models fitting.
 
 ```{r parallel}
 cl <- makePSOCKcluster(3)
 registerDoParallel(cl)
 ```
 
-```{r fitRF, cache=TRUE, dependson='getfiles'}
-mod1 <- train(
-  classe ~ .,
-  method="rf",
-  data=training,
-  trControl = trainControl(method = "cv", 3)
-  )
+### Model 1 - Random Forest
+Random forests are one of the top performing algorithms for multi-class classification, therefore this is one of the first algoritms we consider.  We fit a Random Forest model using default pre-processing settings.  For *Cross Validation* we'll use K-fold method with k = 3 passed through the training control option.
+
+```{r fitRF, cache=TRUE, dependson='cleandata'}
+mod1 <- train(classe ~ ., method="rf", data=training, trControl = trainControl(method = "cv", 3))
 ```
 
-```{r fitNB, cache=TRUE, dependson='getfiles'}
-mod2 <- train(classe ~ ., method="naive_bayes", data=training)
+### Model 2 - Naive Bayes
+Naive Bayes algoritm assumes that all the variables are uncorrelated.  This algoritm will help us to get a baseline for the accuracy of the dataset by counting the occurrence of each variable attribute with each class.  For *Cross Validation* we'll use K-fold method with k = 30 passed through the training control option.
+
+```{r fitNB, cache=TRUE, dependson='cleandata'}
+mod2 <- train(classe ~ ., method="naive_bayes", data=training, trControl = trainControl(method = "cv", 30))
 ```
 
-```{r fitBGLM, cache=TRUE, dependson='getfiles'}
-mod3 <- train(classe ~ ., method="bayesglm", data=training)
+### Model 3 - Extreme Gradient Boosting
+XGBoost belongs to the family of gradient boosting algorithms which combine or ensemble weak classificaition models.  The option selected using the *caret* package uses decision trees.  .  For *Cross Validation* we'll use K-fold method with k = 3 passed through the training control option.
+
+```{r fitXGB, cache=TRUE, dependson='cleandata'}
+mod3 <- train(classe ~ ., method="xgbTree", data=training, trControl = trainControl(method = "cv", 3))
 ```
 
-```{r fitQDA, cache=TRUE, dependson='getfiles'}
+### Model 4 - Quadratic Discriminant Analysis
+This method estimates the covariance matrix separately for each class using a quadratic discriminant function.  QDA is an improvement to the Linear Discriminant Analysis (LDA).  For *Cross Validation* we'll use K-fold method with k = 30 passed through the training control option.
+
+```{r fitQDA, cache=TRUE, dependson='cleandata'}
 mod4 <- train(classe ~ ., method="qda", data=training, trControl = trainControl(method = "cv", 30))
 ```
 
-```{r fitKNN, cache=TRUE, dependson='getfiles'}
-mod5 <- train(classe ~ ., method="knn", data=training, trControl = trainControl(method = "cv", 30))
+### Model 5 - Support Vector Machine with Polynomial Kernel
+The SVM method creates hyperplanes in multi-dimensional spaces that effectively separates the distinct classes.  This implementation in caret takes important time to compute therefore for *Cross Validation* we'll use K-fold method with only k = 3 passed through the training control option.
+
+```{r fitSVM, cache=TRUE, dependson='cleandata'}
+mod5 <- train(classe ~ ., method="svmPoly", data=training, trControl = trainControl(method = "cv", 3))
 ```
 
-```{r fitKKNN, cache=TRUE, dependson='getfiles'}
+### Model 6 - k-Nearest Neighbors
+This algorithm generates an output based on the _k_ closest training examples, in the case of classification this output is a class membership. This method has no training method and it's easy to implement. For *Cross Validation* we'll use K-fold method with k = 30 passed through the training control option.
+
+```{r fitKKNN, cache=TRUE, dependson='cleandata'}
 mod6 <- train(classe ~ ., method="kknn", data=training, trControl = trainControl(method = "cv", 30))
 ```
 
-```{r sequential, dependson='libraries'}
+```{r sequential}
 stopCluster(cl)
 registerDoSEQ()
 ```
+
+## Build Predictions
+Now we build the predictions based on the 6 models we fitted and estimate the accuracy values
 
 ```{r predictions, cache=TRUE, dependson=c(-2, -3, -4, -5, -6, -7)}
 pred1 <- predict(mod1, testing)
@@ -219,18 +189,35 @@ pred4 <- predict(mod4, testing)
 pred5 <- predict(mod5, testing)
 pred6 <- predict(mod6, testing)
 
-confusionMatrix(testing$classe, pred1)$overall["Accuracy"]
-confusionMatrix(testing$classe, pred2)$overall["Accuracy"]
-confusionMatrix(testing$classe, pred3)$overall["Accuracy"]
-confusionMatrix(testing$classe, pred4)$overall["Accuracy"]
-confusionMatrix(testing$classe, pred5)$overall["Accuracy"]
-confusionMatrix(testing$classe, pred6)$overall["Accuracy"]
+accuracyDF <- data.frame(
+  c("Random Forest", "Naive Bayes", "Extreme Gradient Boosting", "Quadratic Discriminant Analysis", "Support Vector Machine", "k-Nearest Neighbors"),
+  c(
+    confusionMatrix(testing$classe, pred1)$overall["Accuracy"],
+    confusionMatrix(testing$classe, pred2)$overall["Accuracy"],
+    confusionMatrix(testing$classe, pred3)$overall["Accuracy"],
+    confusionMatrix(testing$classe, pred4)$overall["Accuracy"],
+    confusionMatrix(testing$classe, pred5)$overall["Accuracy"],
+    confusionMatrix(testing$classe, pred6)$overall["Accuracy"]
+  )
+)
 
-qplot(pred1, pred6, color=classe, data=testing)
+print(accuracyDF)
 ```
 
+From the accuracy data frame we see how the different models perform.  Another way to visualize the performance is using a quck scatter plot comparing the predicted values for each pair.  We selected the 3-top performing algoritms for the plots.
+
+```{r plotaccuracy, cache=TRUE, dependson='predictions'}
+qplot(pred1, pred5, color=classe, data=testing)
+qplot(pred1, pred3, color=classe, data=testing)
+qplot(pred3, pred5, color=classe, data=testing)
+```
+
+## Ensemble Best Performing Models
+From the previous analysis we identified the top-3 best performing models, now we're going to combine them or create an ensemble model.
+
+
 ```{r combine, cache=TRUE, dependson='predictions'}
-predDF <- data.frame(pred1, pred6, classe = testing$classe)
+predDF <- data.frame(pred1, pred3, pred5, classe = testing$classe)
 
 combModFit <- train(classe ~ ., method = "rf", data = predDF)
 combPred <- predict(combModFit, predDF)
@@ -238,24 +225,22 @@ combPred <- predict(combModFit, predDF)
 confusionMatrix(testing$classe, combPred)$overall["Accuracy"]
 ```
 
-```{r importance}
-library(randomForest)
-importanceRF <- randomForest(classe ~ ., data = miniTraining)
-importanceDF <- as.data.frame(importance(importanceRF), optional = TRUE)
-importanceDF$name <- row.names(importanceDF)
-importanceDF <- importanceDF[order(importanceDF$MeanDecreaseGini, decreasing = TRUE), ]
+As expected we see a modest increment of the accuracy in the combined model.
 
-varsImportance <- names(testing) %in% head(importanceDF, 4)$name
+## Predicted values for the evaluation data
+the final quiz requires to predict the value of *classe* given 20 new data points.  In order to predict these new values we'll use the ensemble model.  This requires to combine the predictions in a data frame and pass this prediction to the *predict* function
 
-featurePlot(
-  x = training[, varsImportance],
-  y = training$classe,
-  plot = "ellipse",
-  auto.key = list(columns = 5),
-  par.settings = mySettings
-  )
+```{r evaluation, cache=TRUE, dependson='combine'}
+evaluation <- evaluationClean[1,-53] # remove problem_id column
+pred1V <- predict(mod1, evaluationClean); pred3V <- predict(mod3, evaluationClean); pred5V <- predict(mod5, evaluationClean)
+predVDF <- data.frame(pred1 = pred1V, pred3 = pred3V, pred5 = pred5V) # Dataframe combining predictions
+predEval <- predict(combModFit, predVDF)
+
+print(predEval)
 ```
 
-# References
+## Conclusion
+There are numerous machine learning methods for multi-class classification, each one of them with advantages and disadvantages.  Trial-and-error and learning in detail about each method is required to make a good judgment as to which one is better at solving particular classification problems.  Finally, creating an ensemble may help boosting the accuracy sligthly.
 
+# References
 <div id="refs"></div>
