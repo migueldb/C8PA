@@ -20,7 +20,7 @@ knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 ```
 
 # NOTES FOR REVIEWERS
-I'm using GitHub Pages functionality that allows to host html code as a webpage [this webpage](https://migueldb.github.io/C8PA/).  If you want to review the rMarkdown file and the complete repository, please check [https://github.com/migueldb/C8PA](https://github.com/migueldb/C8PA)
+I'm using GitHub Pages functionality that allows HTML code to be posted as a web page ([this webpage](https://migueldb.github.io/C8PA/)).  If you want to review the rMarkdown file and the complete repository, please check the following link: [https://github.com/migueldb/C8PA](https://github.com/migueldb/C8PA)
 
 ## Introduction
 This work is a programming assignment submission for the Practical Machine Learning course with the Johns Hopkins University through Coursera.  The goal of this project is to use data from accelerometers to conduct qualitative activity recognition of weight lifting exercises.  The data provided is a csv file with 159 columns and 19,622 rows.  The student is expected to use the R-package 'caret' and apply any, or a combination, of the Machine Learning techniques learned during the course to correctly identify the specified execution of the exercise represented with the variable "classe".
@@ -31,17 +31,17 @@ The data was collected from six young individuals who were asked to perform one 
 Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: [http://groupware.les.inf.puc-rio.br/har](http://groupware.les.inf.puc-rio.br/har) (see the section on the Weight Lifting Exercise Dataset). 
 
 ## Preprocessing
-First we load all the required libraries and set a random number generator seed for reproducibility.
+First, the required libraries are loaded and a random number generator seed is set for reproducibility.
 
 ```{r libraries, results='hide'}
 library(readr); library(dplyr); library(lubridate); library(caret); library(AppliedPredictiveModeling)
-library(doParallel); library(randomForest); library(cvms) # Load libraries
+library(doParallel); library(randomForest); library(cvms); library(gridExtra) # Load libraries
 
 set.seed(2021) # Set random generator seed
 ```
 
 ### Collect The Data
-Next we download the data from the server and store the csv files in the raw folder.  The downloaded files will be used if they exist otherwise the script will download a new set of files.  An unmodified copy of the data is stored using the data frames *trainingSRC* and *evaluationSRC*  with explicit declaration of column types.
+Next, the data from the server is downloaded and stored in the raw folder.  The downloaded files in the raw folder will be used if they exist otherwise the script will download a new set of files.  An unmodified copy of the data is stored using the data frames *trainingSRC* and *evaluationSRC*  with explicit declaration of column types.
 
 ```{r getfiles, cache=TRUE}
 # Source files URLs
@@ -67,7 +67,7 @@ evaluationSRC <- read_csv(evaluationFile, col_types = col_typesEvaluation)
 ```
 
 ### Clean The Data
-We noted that the data sets provided have numerous empty columns, these empty columns are identified and removed before splitting the training data set into training and testing.  Columns with information irrelevant to the classification problem are identified as well for removal.  Finally we also noticed that the *evaluation* data used for the final quiz has more empty columns, this means that the corresponding variables won't be available to build predictions from the fitted models, therefore it is required to remove these columns (variables) from the *training* and *testing* datasets.
+It can be noted that the data sets provided have numerous empty columns, these empty columns are identified and removed before splitting the training data set into training and testing.  The columns with information irrelevant to the classification problem are identified as well for removal.  Finally, it can be also noticed that the *evaluation* data used for the final quiz has additional empty columns, this means that the corresponding predictors won't be available to build predictions from the fitted models, therefore it is required to remove these columns (variables) from the *training* and *testing* data sets as well.
 
 ```{r cleandata, cache=TRUE, dependson='getfiles'}
 # Identify the columns with no information (empty columns)
@@ -100,9 +100,9 @@ testing <- fullTesting
 ```
 
 ## Preliminary Analysis
-In order to understand the impact each one of the variables have on the classification process we take advantage of the variable importance evaluation functions.  The package *randomForest* includes the function *importance* that helps understand the correlation structure.  For visualization purposes we select the top 4 most important variables and create a feature plot with them.  It is clear that there's no clear separation between the classes for the selected predictors as the color clouds superpose in the feature plots.
+The variable importance evaluation functions can be used to show the impact each one of the predictors or variables have on the classification process.  The package *randomForest* includes the function *importance* which helps understanding the correlation structure.  For visualization purposes only the top 4 most important variables are selected for display with a feature plot.  It is clear that there's no clear separation between the classes for the selected predictors as the color clouds superpose on the feature plots.
 
-```{r importance, cache=TRUE, dependson='cleandata', fig.dim = c(10, 10)}
+```{r importance, cache=TRUE, dependson='cleandata', fig.dim = c(10, 10), fig.cap='Fig. 1 - Feature plot showing the top-4 variables by importance plotted against each other.  The predictand *classe* is represented by color.'}
 # Fit a Random Forest model required to estimate the variable's importance ranking
 importanceRF <- randomForest(classe ~ ., data = miniTraining)
 
@@ -131,7 +131,7 @@ featurePlot(x = training[randSample, varsImportance],  y = training$classe[randS
 ```
 
 ## Fit models
-We are going to fit 6 different models and compare them in terms of accuracy.  we take advantage of the *parallel* library to expedite the models fitting.
+Six different models are fitted and compared in terms of accuracy, taking advantage of the *parallel* library to expedite the models fitting.
 
 ```{r parallel}
 cl <- makePSOCKcluster(3)
@@ -139,42 +139,42 @@ registerDoParallel(cl)
 ```
 
 ### Model 1 - Random Forest
-Random forests are one of the top performing algorithms for multi-class classification, therefore this is one of the first algoritms we consider.  We fit a Random Forest model using default pre-processing settings.  For *Cross Validation* we'll use K-fold method with k = 3 passed through the training control option.
+Random forests are one of the top performing algorithms for multi-class classification, therefore this is one of the first algorithms to consider.  A Random Forest model is fit using default pre-processing settings using k-fold method with k = 3 for *Cross Validation* passed through the training control option.
 
 ```{r fitRF, cache=TRUE, dependson='cleandata'}
 mod1 <- train(classe ~ ., method="rf", data=training, trControl = trainControl(method = "cv", 3))
 ```
 
 ### Model 2 - Naive Bayes
-Naive Bayes algoritm assumes that all the variables are uncorrelated.  This algoritm will help us to get a baseline for the accuracy of the dataset by counting the occurrence of each variable attribute with each class.  For *Cross Validation* we'll use K-fold method with k = 30 passed through the training control option.
+Naive Bayes algorithm assumes that all the variables are uncorrelated.  This algorithm helps obtaining a baseline for the accuracy of the data set by counting the occurrence of each variable attribute with each class.  k-fold method with k = 30 will be used For *Cross Validation* passed through the training control option.
 
 ```{r fitNB, cache=TRUE, dependson='cleandata'}
 mod2 <- train(classe ~ ., method="naive_bayes", data=training, trControl = trainControl(method = "cv", 30))
 ```
 
 ### Model 3 - Extreme Gradient Boosting
-XGBoost belongs to the family of gradient boosting algorithms which combine or ensemble weak classificaition models.  The option selected using the *caret* package uses decision trees.  .  For *Cross Validation* we'll use K-fold method with k = 3 passed through the training control option.
+XGBoost belongs to the family of gradient boosting algorithms which combine or ensemble weak classification models.  k-fold method with k = 3 will be used For *Cross Validation* passed through the training control option.
 
 ```{r fitXGB, cache=TRUE, dependson='cleandata'}
 mod3 <- train(classe ~ ., method="xgbTree", data=training, trControl = trainControl(method = "cv", 3))
 ```
 
 ### Model 4 - Quadratic Discriminant Analysis
-This method estimates the covariance matrix separately for each class using a quadratic discriminant function.  QDA is an improvement to the Linear Discriminant Analysis (LDA).  For *Cross Validation* we'll use K-fold method with k = 30 passed through the training control option.
+This method estimates the covariance matrix separately for each class using a quadratic discriminant function.  QDA is an improvement to the Linear Discriminant Analysis (LDA).  k-fold method with k = 30 will be used For *Cross Validation* passed through the training control option.
 
 ```{r fitQDA, cache=TRUE, dependson='cleandata'}
 mod4 <- train(classe ~ ., method="qda", data=training, trControl = trainControl(method = "cv", 30))
 ```
 
 ### Model 5 - Support Vector Machine with Polynomial Kernel
-The SVM method creates hyperplanes in multi-dimensional spaces that effectively separates the distinct classes.  This implementation in caret takes important time to compute therefore for *Cross Validation* we'll use K-fold method with only k = 3 passed through the training control option.
+The SVM method creates hyperplanes in multi-dimensional spaces that effectively separates the distinct classes.  This implementation in caret takes important time to compute therefore for *Cross Validation* the k-fold method was implemented with only k = 3 passed through the training control option.
 
 ```{r fitSVM, cache=TRUE, dependson='cleandata'}
 mod5 <- train(classe ~ ., method="svmPoly", data=training, trControl = trainControl(method = "cv", 3))
 ```
 
 ### Model 6 - k-Nearest Neighbors
-This algorithm generates an output based on the _k_ closest training examples, in the case of classification this output is a class membership. This method has no training method and it's easy to implement. For *Cross Validation* we'll use K-fold method with k = 30 passed through the training control option.
+This algorithm generates an output based on the *k* closest training examples, in the case of classification, this output is a class membership. This method has no training method and it's easy to implement. k-fold method with k = 30 will be used For *Cross Validation* passed through the training control option.
 
 ```{r fitKKNN, cache=TRUE, dependson='cleandata'}
 mod6 <- train(classe ~ ., method="kknn", data=training, trControl = trainControl(method = "cv", 30))
@@ -186,7 +186,7 @@ registerDoSEQ()
 ```
 
 ## Build Predictions
-Now we build the predictions based on the 6 models we fitted and estimate the accuracy values
+A set of six predictions is built using the fitted models applied to the testing dataset.  Later a table with the accuracy values is displayed for comparison.
 
 ```{r predictions, cache=TRUE, dependson=c(-2, -3, -4, -5, -6, -7)}
 pred1 <- predict(mod1, testing)
@@ -213,33 +213,34 @@ names(accuracyDF) <- c("Model", "Accuracy")
 print(accuracyDF)
 ```
 
-From the accuracy data frame we see how the different models perform.  Another way to visualize the performance is using a quck scatter plot comparing the predicted values for each pair.  We selected the 3-top performing algoritms for the plots.
+### Expected Sample Error
+From the accuracy data frame we see how the different models perform.  The expected sample error can be visualized using scatter plot comparing the predicted values for each pair of predictors.  For simplicity only the 3-top performing algorithms are selected for display.
 
-```{r plotaccuracy, cache=TRUE, dependson='predictions'}
-qplot(pred1, pred5, color=classe, data=testing)
-qplot(pred1, pred3, color=classe, data=testing)
-qplot(pred3, pred5, color=classe, data=testing)
+```{r plotaccuracy, cache=TRUE, dependson='predictions', fig.dim = c(10, 2.5), fig.cap='Fig. 2 - Triplet of plots showing how each pair of predictions compare in terms of accuracy.  The true value of the predictand *classe* is represented with color'}
+p1 <- qplot(pred1, pred5, color=classe, data=testing)
+p2 <- qplot(pred1, pred3, color=classe, data=testing)
+p3 <- qplot(pred3, pred5, color=classe, data=testing)
+
+grid.arrange(p1, p2, p3, nrow = 1)
 ```
 
 ## Ensemble Best Performing Models
-From the previous analysis we identified the top-3 best performing models, now we're going to combine them or create an ensemble model.  The confusion matrix plot below provides a picture of the accuracy perforance of the ensemble model.
+An ensemble model is created using the top-3 best performing models identified in the previous section.  The confusion matrix plot below provides a picture of the accuracy performance of the ensemble model.  As expected we see a modest increment of the accuracy in the combined model in comparison with the individual models.
 
 
-```{r combine, cache=TRUE, dependson='predictions'}
+```{r combine, cache=TRUE, dependson='predictions', fig.cap='Fig. 3 - Confusion matrix plot for the ensemble model'}
 predDF <- data.frame(pred1, pred3, pred5, classe = testing$classe)
 
 combModFit <- train(classe ~ ., method = "rf", data = predDF)
 combPred <- predict(combModFit, predDF)
 
-confusionMatrix(testing$classe, combPred)$overall["Accuracy"]
+confusionMatrix(combPred, testing$classe)$overall["Accuracy"]
 
 plot_confusion_matrix(confusion_matrix(combPred, testing$classe))
 ```
 
-As expected we see a modest increment of the accuracy in the combined model.
-
 ## Predicted values for the evaluation data
-the final quiz requires to predict the value of *classe* given 20 new data points.  In order to predict these new values we'll use the ensemble model.  This requires to combine the predictions in a data frame and pass this prediction to the *predict* function
+The final quiz requires the student to predict the value of *classe* given 20 new data points.  Using the ensemble model by combining the model fits from the top-performing models in a single data frame a new and prediction is produced based on the new data (*evaluation* dataset)
 
 ```{r evaluation, cache=TRUE, dependson='combine'}
 evaluation <- evaluationClean[1,-53] # remove problem_id column
@@ -251,7 +252,7 @@ print(predEval)
 ```
 
 ## Conclusion
-There are numerous machine learning methods for multi-class classification, each one of them with advantages and disadvantages.  Trial-and-error and learning in detail about each method is required to make a good judgment as to which one is better at solving particular classification problems.  Finally, creating an ensemble may help boosting the accuracy sligthly.
+There are numerous machine learning methods for multi-class classification, each one of them with advantages and disadvantages.  Trial-and-error and learning in detail about each method is required to make a good judgment as to which one is better at solving particular classification problems.  Finally, creating an ensemble may help improving the accuracy slightly.
 
 # References
 <div id="refs"></div>
