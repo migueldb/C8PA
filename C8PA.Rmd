@@ -1,7 +1,7 @@
 ---
 title: "Practical Machine Learning - Programming Assignment"
 author: "Miguel Duarte B."
-date: "01/13/2021"
+date: "01/15/2021"
 output:
   html_document:
     self_contained: true
@@ -34,7 +34,8 @@ Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible t
 First we load all the required libraries and set a random number generator seed for reproducibility.
 
 ```{r libraries, results='hide'}
-library(readr); library(dplyr); library(lubridate); library(caret); library(AppliedPredictiveModeling); library(doParallel); library(randomForest) # Load libraries
+library(readr); library(dplyr); library(lubridate); library(caret); library(AppliedPredictiveModeling)
+library(doParallel); library(randomForest); library(cvms) # Load libraries
 
 set.seed(2021) # Set random generator seed
 ```
@@ -47,7 +48,8 @@ Next we download the data from the server and store the csv files in the raw fol
 trainingURL <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
 evaluationURL <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
 
-rawFolder <- file.path(getwd(), "raw"); trainingFile <- file.path(rawFolder, "training.csv"); evaluationFile <- file.path(rawFolder, "evaluation.csv") # Assign variables for raw folder and source file names
+rawFolder <- file.path(getwd(), "raw"); trainingFile <- file.path(rawFolder, "training.csv")
+evaluationFile <- file.path(rawFolder, "evaluation.csv") # Assign variables for raw folder and source file names
 
 # Check if the files have been downloaded and stored already, if not download and save them to the raw folder
 if(!file.exists(rawFolder)){dir.create(rawFolder)}
@@ -100,7 +102,7 @@ testing <- fullTesting
 ## Preliminary Analysis
 In order to understand the impact each one of the variables have on the classification process we take advantage of the variable importance evaluation functions.  The package *randomForest* includes the function *importance* that helps understand the correlation structure.  For visualization purposes we select the top 4 most important variables and create a feature plot with them.  It is clear that there's no clear separation between the classes for the selected predictors as the color clouds superpose in the feature plots.
 
-```{r importance, cache=TRUE, dependson='cleandata'}
+```{r importance, cache=TRUE, dependson='cleandata', fig.dim = c(10, 10)}
 # Fit a Random Forest model required to estimate the variable's importance ranking
 importanceRF <- randomForest(classe ~ ., data = miniTraining)
 
@@ -115,12 +117,17 @@ varsImportance <- names(testing) %in% head(importanceDF, 4)$name
 
 # Create a feature plot with the top 4 variables by importance
 transparentTheme(trans = .1) # Select theme
-myColors <- c("light pink", "light blue", "light green", "thistle1", "light yellow") # Modify theme colors
-mySettings <- list(superpose.symbol = list(alpha = rep(0.1, 5),col = myColors, pch = rep(16,5))) # Modify theme superpose symbol settings
+# Useful functions
+#show.settings()
+#trellis.par.get()
+#myColors <- c("light pink", "light blue", "light green", "thistle1", "light yellow") # Modify theme colors
+myColors <- c("#FF00001A", "#0000FF1A", "#66C1A41A", "#0000001A", "#FFFFE01A")
+mySettings <- list(superpose.symbol = list(col = myColors, pch = 15:19))
+trellis.par.set(mySettings) # Modify theme superpose symbol settings
 
 randSample <- sort(sample.int(dim(training)[1],1000)) # Use a smaller random sample to make easier to spot the class clouds
 
-featurePlot(x = training[, varsImportance],  y = training$classe, plot = "ellipse", auto.key = list(columns = 5), par.settings = mySettings) # And finally generate the plot
+featurePlot(x = training[randSample, varsImportance],  y = training$classe[randSample], plot = "ellipse", auto.key = list(columns = 5)) # And finally generate the plot
 ```
 
 ## Fit models
@@ -192,14 +199,16 @@ pred6 <- predict(mod6, testing)
 accuracyDF <- data.frame(
   c("Random Forest", "Naive Bayes", "Extreme Gradient Boosting", "Quadratic Discriminant Analysis", "Support Vector Machine", "k-Nearest Neighbors"),
   c(
-    confusionMatrix(testing$classe, pred1)$overall["Accuracy"],
-    confusionMatrix(testing$classe, pred2)$overall["Accuracy"],
-    confusionMatrix(testing$classe, pred3)$overall["Accuracy"],
-    confusionMatrix(testing$classe, pred4)$overall["Accuracy"],
-    confusionMatrix(testing$classe, pred5)$overall["Accuracy"],
-    confusionMatrix(testing$classe, pred6)$overall["Accuracy"]
+    confusionMatrix(pred1, testing$classe)$overall["Accuracy"],
+    confusionMatrix(pred2, testing$classe)$overall["Accuracy"],
+    confusionMatrix(pred3, testing$classe)$overall["Accuracy"],
+    confusionMatrix(pred4, testing$classe)$overall["Accuracy"],
+    confusionMatrix(pred5, testing$classe)$overall["Accuracy"],
+    confusionMatrix(pred6, testing$classe)$overall["Accuracy"]
   )
 )
+
+names(accuracyDF) <- c("Model", "Accuracy")
 
 print(accuracyDF)
 ```
@@ -213,7 +222,7 @@ qplot(pred3, pred5, color=classe, data=testing)
 ```
 
 ## Ensemble Best Performing Models
-From the previous analysis we identified the top-3 best performing models, now we're going to combine them or create an ensemble model.
+From the previous analysis we identified the top-3 best performing models, now we're going to combine them or create an ensemble model.  The confusion matrix plot below provides a picture of the accuracy perforance of the ensemble model.
 
 
 ```{r combine, cache=TRUE, dependson='predictions'}
@@ -223,6 +232,8 @@ combModFit <- train(classe ~ ., method = "rf", data = predDF)
 combPred <- predict(combModFit, predDF)
 
 confusionMatrix(testing$classe, combPred)$overall["Accuracy"]
+
+plot_confusion_matrix(confusion_matrix(combPred, testing$classe))
 ```
 
 As expected we see a modest increment of the accuracy in the combined model.
