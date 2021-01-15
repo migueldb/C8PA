@@ -20,7 +20,9 @@ knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 ```
 
 # NOTES FOR REVIEWERS
-I'm using GitHub Pages functionality that allows HTML code to be posted as a web page ([this webpage](https://migueldb.github.io/C8PA/)).  If you want to review the rMarkdown file and the complete repository, please check the following link: [https://github.com/migueldb/C8PA](https://github.com/migueldb/C8PA)
+- I'm using GitHub Pages functionality that allows HTML code to be posted as a web page ([this webpage](https://migueldb.github.io/C8PA/)).  If you want to review the rMarkdown file and the complete repository, please check the following link: [https://github.com/migueldb/C8PA](https://github.com/migueldb/C8PA)
+- The selected measure for Sample Error estimation is *Accuracy* which is calculated multiple times throughout the document
+- Cross validation is performed on each one of the model fits using k-fold method using the *trControl = trainControl()* option of the function *train*.
 
 ## Introduction
 This work is a programming assignment submission for the Practical Machine Learning course with the Johns Hopkins University through Coursera.  The goal of this project is to use data from accelerometers to conduct qualitative activity recognition of weight lifting exercises.  The data provided is a csv file with 159 columns and 19,622 rows.  The student is expected to use the R-package 'caret' and apply any, or a combination, of the Machine Learning techniques learned during the course to correctly identify the specified execution of the exercise represented with the variable "classe".

@@ -382,7 +382,11 @@ summary {
 
 <div id="notes-for-reviewers" class="section level1">
 <h1>NOTES FOR REVIEWERS</h1>
-<p>I’m using GitHub Pages functionality that allows HTML code to be posted as a web page (<a href="https://migueldb.github.io/C8PA/">this webpage</a>). If you want to review the rMarkdown file and the complete repository, please check the following link: <a href="https://github.com/migueldb/C8PA">https://github.com/migueldb/C8PA</a></p>
+<ul>
+<li>I’m using GitHub Pages functionality that allows HTML code to be posted as a web page (<a href="https://migueldb.github.io/C8PA/">this webpage</a>). If you want to review the rMarkdown file and the complete repository, please check the following link: <a href="https://github.com/migueldb/C8PA">https://github.com/migueldb/C8PA</a></li>
+<li>The selected measure for Sample Error estimation is <em>Accuracy</em> which is calculated multiple times throughout the document</li>
+<li>Cross validation is performed on each one of the model fits using k-fold method using the <em>trControl = trainControl()</em> option of the function <em>train</em>.</li>
+</ul>
 <div id="introduction" class="section level2">
 <h2>Introduction</h2>
 <p>This work is a programming assignment submission for the Practical Machine Learning course with the Johns Hopkins University through Coursera. The goal of this project is to use data from accelerometers to conduct qualitative activity recognition of weight lifting exercises. The data provided is a csv file with 159 columns and 19,622 rows. The student is expected to use the R-package ‘caret’ and apply any, or a combination, of the Machine Learning techniques learned during the course to correctly identify the specified execution of the exercise represented with the variable “classe”.</p>
